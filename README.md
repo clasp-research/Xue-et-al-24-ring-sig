@@ -66,7 +66,7 @@ Building the full Merkle tree dominates setup for large rings. These benchmarks 
 ```
 cargo run --release -- -q 33 -b 16 -f 4 -g 0 sig-rescue -l 32 --iters 20
 ```
-For statistics via criterion (setup is done once per ring size, outside the timed loop; proof sizes are printed to stderr):
+For statistics via criterion (setup is done once per ring size, outside the timed loop):
 ```
 # all default ring sizes (2^5, 2^10, 2^16, 2^20, 2^25, 2^30, 2^32)
 cargo bench -p examples --bench sigrescue
@@ -75,6 +75,10 @@ cargo bench -p examples --bench sigrescue
 SIG_DEPTHS=20,32 cargo bench -p examples --bench sigrescue
 ```
 `SIG_DEPTHS` selects which ring sizes to benchmark: a comma-separated list of log2 ring sizes (Merkle tree depths), so `SIG_DEPTHS=20,32` benchmarks rings of 2^20 and 2^32 members. Each value works like the `-l` flag above and must be between 1 and 63. If unset, it defaults to `5,10,16,20,25,30,32`. Results appear as `sigrescue_sign/log_ring_size/<d>` and `sigrescue_verify/log_ring_size/<d>`.
+
+Results are written under `target/criterion/` (not tracked by git):
+- `target/criterion/report/index.html`: criterion's HTML report with timing plots and statistics for every ring size.
+- `target/criterion/sigrescue_proof_sizes.csv`: proof size statistics for each ring size (min, mean and max bytes over `SIG_SIZE_SAMPLES` proofs, default 100, since proofs are randomized and their size varies), plus the conjectured security level and proof parameters used. Each run of the bench overwrites it.
 
 See `examples/benches/sigrescue.rs` for the other `SIG_*` environment variables.
 

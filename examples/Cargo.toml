@@ -36,7 +36,7 @@ env_logger = { version = "0.10", default-features = false }
 structopt = { version = "0.3", default-features = false }
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = { version = "0.4", features = ["html_reports"] }
 
 [[bench]]
 name = "fibonacci"
