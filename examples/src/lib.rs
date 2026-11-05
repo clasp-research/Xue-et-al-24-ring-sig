@@ -145,6 +145,13 @@ pub enum ExampleType {
         /// Number of signers; must be one less than a power of two
         #[structopt(short = "n", default_value = "7")]
         num_signers: usize,
+        /// Simulate a ring of 2^l keys by generating only the signer's Merkle path (with random
+        /// siblings) instead of a full tree; overrides -n
+        #[structopt(short = "l", long = "log-ring-size")]
+        log_ring_size: Option<usize>,
+        /// Number of times to repeat signing and verification for timing statistics
+        #[structopt(long = "iters", default_value = "1")]
+        iters: usize,
     },
 }
 

@@ -61,6 +61,20 @@ cargo run -- -q 32 -b 16 -f 4 sig-rescue -n 127
 ```
 
 
+### Benchmarking large rings
+Building the full Merkle tree dominates setup for large rings. These benchmarks use 128-bit settings without grinding (33 queries, blowup 16, folding 4, `-g 0`), which gives more stable signing times than the paper's settings above; the paper's example and its defaults are unchanged. `-l <d>` simulates a ring of 2^d keys by generating only the signer's key pair and Merkle path (random siblings hashed up to the root); signing and verification run exactly as with a real tree. `--iters <N>` repeats signing/verification and prints min/median/mean/max:
+```
+cargo run --release -- -q 33 -b 16 -f 4 -g 0 sig-rescue -l 32 --iters 20
+```
+For statistics via criterion (setup is done once per ring size, outside the timed loop; proof sizes are printed to stderr):
+```
+cargo bench -p examples --bench sigrescue
+SIG_DEPTHS=20,32 cargo bench -p examples --bench sigrescue
+```
+`SIG_DEPTHS` selects which ring sizes to benchmark: a comma-separated list of log2 ring sizes (Merkle tree depths), so `SIG_DEPTHS=20,32` benchmarks rings of 2^20 and 2^32 members. Each value works like the `-l` flag above and must be between 1 and 63. If unset, it defaults to `5,10,16,20,25,30,32`. Results appear as `sigrescue_sign/log_ring_size/<d>` and `sigrescue_verify/log_ring_size/<d>`.
+
+See `examples/benches/sigrescue.rs` for the other `SIG_*` environment variables.
+
 ## References
 [Scalable, transparent, and post-quantum secure computational integrity](https://eprint.iacr.org/2018/046.pdf) \
 Eli Ben-Sasson, Iddo Bentov, Yinon Horesh, and Michael Riabzev
