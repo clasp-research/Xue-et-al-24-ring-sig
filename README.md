@@ -68,7 +68,10 @@ cargo run --release -- -q 33 -b 16 -f 4 -g 0 sig-rescue -l 32 --iters 20
 ```
 For statistics via criterion (setup is done once per ring size, outside the timed loop; proof sizes are printed to stderr):
 ```
+# all default ring sizes (2^5, 2^10, 2^16, 2^20, 2^25, 2^30, 2^32)
 cargo bench -p examples --bench sigrescue
+
+# only the ring sizes you choose, here 2^20 and 2^32 (see SIG_DEPTHS below)
 SIG_DEPTHS=20,32 cargo bench -p examples --bench sigrescue
 ```
 `SIG_DEPTHS` selects which ring sizes to benchmark: a comma-separated list of log2 ring sizes (Merkle tree depths), so `SIG_DEPTHS=20,32` benchmarks rings of 2^20 and 2^32 members. Each value works like the `-l` flag above and must be between 1 and 63. If unset, it defaults to `5,10,16,20,25,30,32`. Results appear as `sigrescue_sign/log_ring_size/<d>` and `sigrescue_verify/log_ring_size/<d>`.
