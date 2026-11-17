@@ -32,22 +32,36 @@ const EVENTID: u8 = 2;
 pub fn get_example(
     options: &ExampleOptions,
     num_signers: usize,
+    log_ring_size: Option<usize>,
 ) -> Result<Box<dyn Example>, String> {
-    let (_, hash_fn) = options.to_proof_options(NUM_QUERIES, BLOWUP_FACTOR);
+    let (proof_options, hash_fn) = options.to_proof_options(NUM_QUERIES, BLOWUP_FACTOR);
+
+    fn build<H>(
+        num_signers: usize,
+        log_ring_size: Option<usize>,
+        options: ProofOptions,
+    ) -> Box<dyn Example>
+    where
+        H: ElementHasher<BaseField = BaseElement> + 'static,
+    {
+        match log_ring_size {
+            Some(depth) => Box::new(RingSigExample::<H>::new_simulated(depth, options)),
+            None => Box::new(RingSigExample::<H>::new(num_signers, options)),
+        }
+    }
 
     match hash_fn {
-        HashFunction::Blake3_192 => Ok(Box::new(RingSigExample::<Blake3_192>::new(
+        HashFunction::Blake3_192 => Ok(build::<Blake3_192>(
             num_signers,
-            options,
-        ))),
-        HashFunction::Blake3_256 => Ok(Box::new(RingSigExample::<Blake3_256>::new(
+            log_ring_size,
+            proof_options,
+        )),
+        HashFunction::Blake3_256 => Ok(build::<Blake3_256>(
             num_signers,
-            options,
-        ))),
-        HashFunction::Sha3_256 => Ok(Box::new(RingSigExample::<Sha3_256>::new(
-            num_signers,
-            options,
-        ))),
+            log_ring_size,
+            proof_options,
+        )),
+        HashFunction::Sha3_256 => Ok(build::<Sha3_256>(num_signers, log_ring_size, proof_options)),
         _ => Err("The specified hash function cannot be used with this example.".to_string()),
     }
 }
@@ -56,7 +70,6 @@ pub struct RingSigExample<H: ElementHasher> {
     options: ProofOptions,
     root: AggPublicKey,
     signer_sk_key: [BaseElement; 2],
-    pks: Vec<[BaseElement; 2]>,
     signer_idx: u128,
     tag: [BaseElement; 2],
     eventid: BaseElement,
@@ -64,7 +77,9 @@ pub struct RingSigExample<H: ElementHasher> {
 }
 
 impl<H: ElementHasher> RingSigExample<H> {
-    pub fn new(num_signers: usize, options: &ExampleOptions) -> Self {
+    /// Builds a ring of `num_signers + 1` keys (rounded up to a power of two) and a real Merkle
+    /// tree over all of them.
+    pub fn new(num_signers: usize, options: ProofOptions) -> Self {
         //num signer excludes real signer
 
         let num_signers = (num_signers + 1).next_power_of_two() - 1;
@@ -91,32 +106,64 @@ impl<H: ElementHasher> RingSigExample<H> {
         let bytes1 = BaseElement::elements_as_bytes(&pk_vec[0]);
         debug!("Public key size: {:.1} bytes", bytes1.len());
 
-        let tag_input = [signer_sk[0], BaseElement::from(EVENTID)];
-        let tag = Rescue128::digest(&tag_input).to_elements();
-
-        let eventid = BaseElement::from(EVENTID);
-
         let now = Instant::now();
-        let root = AggPublicKey::new(pk_vec.clone());
+        let root = AggPublicKey::new(&pk_vec, SIGNER_IDX as usize);
 
         debug!(
             "Built merkle tree for public keys in {} ms",
             now.elapsed().as_millis()
         );
 
-        let (options, _) = options.to_proof_options(NUM_QUERIES, BLOWUP_FACTOR);
+        Self::from_parts(options, root, signer_sk, SIGNER_IDX)
+    }
+
+    /// Simulates a ring of `2^log_ring_size` keys: only the signer's key pair and Merkle path
+    /// (with random siblings) are generated, at a random signer index.
+    pub fn new_simulated(log_ring_size: usize, options: ProofOptions) -> Self {
+        assert!(
+            (1..64).contains(&log_ring_size),
+            "log ring size must be between 1 and 63"
+        );
+        let signer_sk = [rand_value::<BaseElement>(), BaseElement::ONE];
+        let signer_pk = Rescue128::digest(&signer_sk).to_elements();
+        let signer_idx = rand_value::<u64>() & ((1u64 << log_ring_size) - 1);
+
+        let now = Instant::now();
+        let root = AggPublicKey::simulated(&signer_pk, signer_idx as usize, log_ring_size);
+        debug!(
+            "Simulated merkle path for 2^{} public keys in {} ms",
+            log_ring_size,
+            now.elapsed().as_millis()
+        );
+
+        Self::from_parts(options, root, signer_sk, signer_idx as u128)
+    }
+
+    fn from_parts(
+        options: ProofOptions,
+        root: AggPublicKey,
+        signer_sk: [BaseElement; 2],
+        signer_idx: u128,
+    ) -> Self {
+        let tag_input = [signer_sk[0], BaseElement::from(EVENTID)];
+        let tag = Rescue128::digest(&tag_input).to_elements();
+        let eventid = BaseElement::from(EVENTID);
 
         RingSigExample {
             options,
             root,
             signer_sk_key: signer_sk,
             // message: message_to_elements(message.as_bytes()),
-            pks: pk_vec,
-            signer_idx: SIGNER_IDX,
+            signer_idx,
             tag,
             eventid,
             _hasher: PhantomData,
         }
+    }
+
+    /// Returns the number of keys in the ring.
+    pub fn ring_size(&self) -> usize {
+        self.root.num_keys()
     }
 }
 
@@ -128,7 +175,7 @@ where
         debug!(
             "Generating proof for verifying ring signature with {} members \n\
             ---------------------",
-            self.pks.len(),
+            self.root.num_keys(),
         );
 
         // create a prover
@@ -169,7 +216,7 @@ where
         //let msg = message_to_elements("test message".as_bytes());
         let pub_inputs = PublicInputs {
             pub_key_root: self.root.root().to_elements(),
-            num_pub_keys: self.pks.len(),
+            num_pub_keys: self.root.num_keys(),
             tag: self.tag,
             eventid: self.eventid,
         };
@@ -179,7 +226,7 @@ where
     fn verify_with_wrong_inputs(&self, proof: StarkProof) -> Result<(), VerifierError> {
         let pub_inputs = PublicInputs {
             pub_key_root: self.root.root().to_elements(),
-            num_pub_keys: self.pks.len() + 1,
+            num_pub_keys: self.root.num_keys() + 1,
             tag: self.tag,
             eventid: self.eventid,
         };
@@ -211,3 +258,6 @@ where
 
 //     [BaseElement::from(m0), BaseElement::from(m1)]
 // }
+
+#[cfg(test)]
+mod tests;
