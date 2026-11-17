@@ -1,5 +1,5 @@
 # This is a fork of existing work by Xue et al. 2024. We are not Xue et al.
-We extended their benchmarks in this fork.
+We extended their benchmarks in this fork. See README section "Benchmarking large rings."
 
 ## Efficient Linkable Ring Signatures: New Framework and Post-Quantum Instantiations
 
