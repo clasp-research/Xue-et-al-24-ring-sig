@@ -1,4 +1,7 @@
-# Efficient Linkable Ring Signatures: New Framework and Post-Quantum Instantiations
+# This is a fork of existing work by Xue et al. 2024. We are not Xue et al.
+We extended their benchmarks in this fork.
+
+## Efficient Linkable Ring Signatures: New Framework and Post-Quantum Instantiations
 
 This repository contains the implementations of our paper "Efficient Linkable Ring Signatures: New Framework and Post-Quantum Instantiations", which was published at ESORICS 2024.
 
